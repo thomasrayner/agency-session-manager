@@ -11,6 +11,7 @@ import {
   resumeCommand,
   fuzzyScore,
   filterSessions,
+  appendKeyChunk,
 } from "../lib/sessions.mjs";
 import { parseQuery } from "../lib/query.mjs";
 
@@ -162,5 +163,23 @@ assert.equal(fld.length, 0, "field filters AND together");
 const dated = filterSessions(qSample, "after:2026-06-23T11:00:00");
 assert.ok(dated.length >= 1 && dated.every((s) => s.updatedMs >= Date.parse("2026-06-23T11:00:00")), "after: date bound");
 ok("filterSessions honors query operators");
+
+// --- TUI input: multi-character chunks (fast typing / paste) are not dropped
+let s = "";
+// single keystrokes
+for (const ch of "re") s = appendKeyChunk(s, ch).search;
+assert.equal(s, "re", "single chars append");
+// a whole word arriving in ONE data event (the bug: was dropped before)
+s = appendKeyChunk(s, "po:swarm").search;
+assert.equal(s, "repo:swarm", "multi-char chunk appended in full");
+// embedded backspace within a chunk
+s = appendKeyChunk(s, "x\x7f review").search;
+assert.equal(s, "repo:swarm review", "embedded backspace handled");
+// escape sequences (arrow keys) never alter the search text
+const beforeEsc = s;
+const escRes = appendKeyChunk(s, "\x1b[A");
+assert.equal(escRes.changed, false, "escape sequence makes no change");
+assert.equal(escRes.search, beforeEsc, "escape sequence leaves search intact");
+ok("appendKeyChunk handles bursts, backspace, escapes");
 
 console.log(`\nAll ${passed} smoke checks passed.`);

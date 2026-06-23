@@ -20,6 +20,7 @@ import {
   relativeAge,
   locationLabel,
   resumeCommand,
+  appendKeyChunk,
 } from "../lib/sessions.mjs";
 
 // ---------------------------------------------------------------- arg parsing
@@ -370,12 +371,16 @@ function runTui() {
     // filter instead, which is the primary navigation aid.
     if (key === "\x0b") return; // ignore Ctrl-K
 
-    // Printable characters -> append to search filter
-    if (key.length === 1 && key >= " " && key !== "\x7f") {
-      search += key;
+    // Printable text -> append to the search filter. A single `data` event can
+    // carry MANY characters (fast typing, paste, or buffered input), so process
+    // the whole chunk rather than only single keystrokes.
+    const res = appendKeyChunk(search, key);
+    if (res.changed) {
+      search = res.search;
       applyFilter();
-      return render();
+      render();
     }
+    return;
   });
 }
 
