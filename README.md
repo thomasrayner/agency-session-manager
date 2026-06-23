@@ -30,6 +30,21 @@ and with plain `copilot` are persisted to the *same* unencrypted store
 
 ## Usage
 
+### Slash command (easiest)
+
+Once installed, just type:
+
+```
+/picksession                 # browse & resume recent sessions
+/picksession design review   # pre-filter by a search term
+```
+
+Copilot lists your recent sessions and resumes the one you pick (defaulting to
+`agency copilot`). The command is defined in `commands/picksession.md`.
+
+A distinct name (`/picksession`, not `/sessions`) avoids colliding with the
+builtin `/session` command.
+
 ### Interactive TUI
 
 ```bash
@@ -81,6 +96,7 @@ Override the store location with the `COPILOT_SESSION_STORE` environment variabl
 ```
 bin/session-manager.mjs        # TUI + CLI entry point
 lib/sessions.mjs               # read-only session-store access + helpers
+commands/picksession.md        # /picksession slash command
 skills/session-manager/SKILL.md# in-chat skill (list/search/resume)
 test/smoke.mjs                 # smoke tests (logic + CLI surface)
 .claude-plugin/plugin.json     # plugin manifest

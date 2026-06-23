@@ -5,5 +5,7 @@
   "author": {
     "name": "thrayner"
   },
-  "keywords": ["sessions", "tui", "resume", "session-manager", "copilot", "agency"]
+  "keywords": ["sessions", "tui", "resume", "session-manager", "copilot", "agency"],
+  "skills": "skills/",
+  "commands": "commands/"
 }
