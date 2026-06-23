@@ -12,8 +12,12 @@ and with plain `copilot` are persisted to the *same* unencrypted store
 
 ## Features
 
-- 🖥️ **Interactive TUI** — arrow-key navigation, live fuzzy-ish substring filtering,
-  columns for age / repo·cwd / summary.
+- ⚡ **Instant & AI-free** — the TUI reads the SQLite store directly and renders in
+  milliseconds. It never calls a model, so there's no spin-up latency.
+- 🖥️ **Interactive TUI** — arrow-key + paging navigation that scrolls your entire
+  session history, with columns for age / date / repo·cwd / summary.
+- 🔎 **Fuzzy finding** — type to fuzzy-match (fzf-style subsequence scoring) across
+  summary, cwd, repo, branch, and id; multi-word queries AND-match and rank by relevance.
 - 🔁 **One-key resume** — `Enter` drops you straight into the selected session.
 - 🔀 **Launcher toggle** — `Tab` switches between `agency copilot` (default, re-applies
   your Agency plugins/skills) and plain `copilot`.
@@ -30,32 +34,27 @@ and with plain `copilot` are persisted to the *same* unencrypted store
 
 ## Usage
 
-### Slash command (easiest)
+### Interactive TUI (recommended — instant, no AI)
 
-Once installed, just type:
-
-```
-/picksession                 # browse & resume recent sessions
-/picksession design review   # pre-filter by a search term
-```
-
-Copilot lists your recent sessions and resumes the one you pick (defaulting to
-`agency copilot`). The command is defined in `commands/picksession.md`.
-
-A distinct name (`/picksession`, not `/sessions`) avoids colliding with the
-builtin `/session` command.
-
-### Interactive TUI
+Launch the full-screen picker directly. It loads near-instantly and never invokes a
+model:
 
 ```bash
 node bin/session-manager.mjs
+# or the bundled wrappers:
+bin/picksession.cmd        # Windows
+bin/picksession.ps1        # PowerShell / cross-platform
 ```
+
+For one-keystroke access, add a shell alias pointing at `bin/session-manager.mjs`
+(e.g. a PowerShell `$PROFILE` function named `picksession`).
 
 | Key | Action |
 | --- | --- |
 | `↑` / `↓` | Move selection |
 | `PgUp` / `PgDn` | Page up / down |
-| *type* | Filter (summary, cwd, repo, branch, id) |
+| `Home` / `End` | Jump to first / last |
+| *type* | **Fuzzy-find** (summary, cwd, repo, branch, id) |
 | `Backspace` | Edit the filter |
 | `Enter` | Resume the selected session |
 | `Tab` | Toggle launcher (`agency copilot` ⇄ `copilot`) |
@@ -67,7 +66,7 @@ node bin/session-manager.mjs
 # List the 20 most recent sessions
 node bin/session-manager.mjs --list --limit 20
 
-# Search
+# Search (fuzzy)
 node bin/session-manager.mjs --list --search "design review"
 
 # Machine-readable
@@ -80,6 +79,12 @@ node bin/session-manager.mjs --resume-cmd <session-id> --copilot  # plain copilo
 # Render one TUI frame (layout sanity check, no TTY needed)
 node bin/session-manager.mjs --preview 12 100
 ```
+
+### In-chat (conversational)
+
+The bundled skill lets Copilot find and resume sessions for you from chat — e.g.
+"list my recent sessions" or "resume my session about the design review". This path
+*does* use the model; for an instant pick, run the TUI above.
 
 ## How it works
 
@@ -95,8 +100,9 @@ Override the store location with the `COPILOT_SESSION_STORE` environment variabl
 
 ```
 bin/session-manager.mjs        # TUI + CLI entry point
-lib/sessions.mjs               # read-only session-store access + helpers
-commands/picksession.md        # /picksession slash command
+bin/picksession.cmd            # instant launcher (Windows)
+bin/picksession.ps1            # instant launcher (PowerShell)
+lib/sessions.mjs               # read-only session-store access + fuzzy matching
 skills/session-manager/SKILL.md# in-chat skill (list/search/resume)
 test/smoke.mjs                 # smoke tests (logic + CLI surface)
 .claude-plugin/plugin.json     # plugin manifest

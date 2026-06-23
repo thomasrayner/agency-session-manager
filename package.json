@@ -5,7 +5,8 @@
   "description": "TUI session manager for Copilot CLI / agency copilot sessions.",
   "type": "module",
   "bin": {
-    "agency-session-manager": "bin/session-manager.mjs"
+    "agency-session-manager": "bin/session-manager.mjs",
+    "picksession": "bin/session-manager.mjs"
   },
   "scripts": {
     "start": "node bin/session-manager.mjs",

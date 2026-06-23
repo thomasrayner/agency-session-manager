@@ -9,6 +9,8 @@ import {
   relativeAge,
   locationLabel,
   resumeCommand,
+  fuzzyScore,
+  filterSessions,
 } from "../lib/sessions.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -85,9 +87,38 @@ ok("no experimental warning in stdout");
 const preview = execFileSync("node", [bin, "--preview", "10", "90"], {
   encoding: "utf8",
 });
-assert.ok(/Agency Session Manager/.test(preview), "preview has title");
+assert.ok(/Sessions/.test(preview), "preview has title");
 assert.ok(/Enter resume/.test(preview), "preview has footer help");
 assert.ok(/sessions/.test(preview), "preview has session count");
 ok("TUI --preview renders a full frame");
+
+// --- fuzzyScore: subsequence matching + ranking
+assert.equal(fuzzyScore("", "anything"), 0, "empty query scores 0");
+assert.equal(fuzzyScore("xyz", "abc"), -Infinity, "non-subsequence is -Infinity");
+assert.ok(fuzzyScore("swrm", "swarm") > -Infinity, "swrm matches swarm");
+// Contiguous + earlier match should outrank scattered/later match.
+assert.ok(
+  fuzzyScore("tui", "tui plugin") > fuzzyScore("tui", "the user interface"),
+  "contiguous/early beats scattered"
+);
+ok("fuzzyScore subsequence + ranking");
+
+// --- filterSessions: multi-term AND, ranking, empty passthrough
+const sample = [
+  { summary: "Create TUI Session Manager Plugin", cwd: "", repository: "", branch: "", id: "a" },
+  { summary: "swarm agentic review", cwd: "C:/r/swarm", repository: "swarm", branch: "main", id: "b" },
+  { summary: "unrelated note", cwd: "", repository: "", branch: "", id: "c" },
+];
+const empty = filterSessions(sample, "");
+assert.equal(empty.length, 3, "empty query returns all");
+const tuiHits = filterSessions(sample, "tui plugin");
+assert.equal(tuiHits[0].id, "a", "best multi-term match ranks first");
+assert.ok(
+  !tuiHits.some((s) => s.id === "c"),
+  "non-matching session excluded"
+);
+const swarmHits = filterSessions(sample, "swrm");
+assert.equal(swarmHits[0].id, "b", "fuzzy term matches across fields");
+ok("filterSessions multi-term AND + ranking");
 
 console.log(`\nAll ${passed} smoke checks passed.`);

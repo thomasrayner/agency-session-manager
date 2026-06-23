@@ -32,14 +32,20 @@ All commands below require **Node.js ≥ 22.5** (for the built-in `node:sqlite`)
 
 A full-screen arrow-key picker must run in the user's **own interactive terminal**
 (an agent shell is not an interactive TTY). When the user asks to "open the session
-manager" or "launch the TUI", tell them to run:
+manager" or "launch the TUI", tell them to run either the wrapper or Node directly:
 
 ```bash
+# wrapper (Windows .cmd / cross-platform .ps1)
+"<plugin-root>/bin/picksession.cmd"
 node "<plugin-root>/bin/session-manager.mjs"
 ```
 
-TUI keys: `↑/↓` move · type to filter · `Backspace` edit filter · `Enter` resume ·
-`Tab` toggle launcher (**agency copilot** ⇄ copilot) · `Esc`/`Ctrl-C` quit.
+The TUI is **AI-free and instant** — it reads the SQLite store directly and never
+calls a model. It scrolls the full session history and fuzzy-finds as you type.
+
+TUI keys: `↑/↓` move · `PgUp/PgDn` page · `Home/End` jump · type to **fuzzy-find** ·
+`Backspace` edit filter · `Enter` resume · `Tab` toggle launcher
+(**agency copilot** ⇄ copilot) · `Esc`/`Ctrl-C` quit.
 On `Enter` it `exec`s the resume command and drops the user into that session.
 
 ### 2. In-chat (you, the agent, drive it non-interactively)

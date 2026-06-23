@@ -16,6 +16,7 @@ import process from "node:process";
 import { spawnSync } from "node:child_process";
 import {
   loadSessions,
+  filterSessions,
   relativeAge,
   locationLabel,
   resumeCommand,
@@ -113,30 +114,58 @@ function visibleSlice(str, width) {
   return str.slice(0, width - 1) + "…";
 }
 
+// Visible length of a string ignoring ANSI escape sequences.
+function stripLen(str) {
+  return String(str).replace(/\x1b\[[0-9;]*m/g, "").length;
+}
+
+// Compact local date label, e.g. "Jun 17 14:32" or "2025 Jun 17" for old items.
+function shortDate(ms) {
+  if (!ms) return "";
+  const d = new Date(ms);
+  const mon = d.toLocaleString("en-US", { month: "short" });
+  const day = String(d.getDate()).padStart(2, " ");
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  if (sameYear) {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `${mon} ${day} ${hh}:${mm}`;
+  }
+  return `${d.getFullYear()} ${mon} ${day}`;
+}
+
 // Pure frame builder — assembles the screen as a string. No IO, so it is
 // directly testable and reused by both the live TUI and `--preview`.
 function buildFrame(state, cols, rows) {
   const { all, filtered, selected, scroll, search, launcher } = state;
-  const win = Math.max(3, rows - 4); // header(2) + footer(2)
+  const win = Math.max(3, rows - 3); // header(2) + footer(1)
   const lines = [];
 
   const launcherLabel = launcher === "agency" ? "agency copilot" : "copilot";
-  const title = ` ${ansi.bold}${ansi.cyan}Agency Session Manager${ansi.reset}`;
-  const right = `${ansi.dim}resume via ${ansi.reset}${ansi.green}${launcherLabel}${ansi.reset}${ansi.dim}  [Tab to toggle]${ansi.reset}`;
-  lines.push(title + "  " + right);
-  const count = `${filtered.length}/${all.length} sessions`;
-  const searchLine = search
-    ? `${ansi.yellow}/${search}${ansi.reset}`
-    : `${ansi.dim}(type to filter)${ansi.reset}`;
-  lines.push(` ${ansi.dim}${count}${ansi.reset}   ${searchLine}`);
+  const title = `${ansi.bold}${ansi.cyan}▌Sessions${ansi.reset}`;
+  const right = `${ansi.dim}↵ resumes via ${ansi.reset}${ansi.green}${launcherLabel}${ansi.reset} ${ansi.dim}· Tab toggles${ansi.reset}`;
+  lines.push(` ${title}  ${right}`);
 
+  // Search / status line: live query + position + count.
+  const pos = filtered.length ? `${selected + 1}/${filtered.length}` : "0/0";
+  const matchInfo =
+    search && filtered.length !== all.length
+      ? `${filtered.length} of ${all.length}`
+      : `${all.length}`;
+  const prompt = `${ansi.yellow}🔍 ${search}${ansi.reset}${ansi.dim}▏${ansi.reset}`;
+  const status = `${ansi.dim}${pos} · ${matchInfo} sessions${ansi.reset}`;
+  const padN = Math.max(1, cols - stripLen(prompt) - stripLen(status) - 2);
+  lines.push(` ${prompt}${" ".repeat(padN)}${status}`);
+
+  // Columns: marker(2) age(5) date(11) loc summary
   const ageW = 5;
-  const locW = Math.min(30, Math.max(12, Math.floor(cols * 0.28)));
-  const sumW = Math.max(10, cols - ageW - locW - 6);
+  const dateW = 12;
+  const locW = Math.min(28, Math.max(12, Math.floor(cols * 0.24)));
+  const sumW = Math.max(10, cols - 2 - ageW - dateW - locW - 5);
 
   if (filtered.length === 0) {
     lines.push("");
-    lines.push(`   ${ansi.dim}No matching sessions.${ansi.reset}`);
+    lines.push(`   ${ansi.dim}No sessions match “${search}”.${ansi.reset}`);
     while (lines.length < win + 2) lines.push("");
   } else {
     for (let i = 0; i < win; i++) {
@@ -147,20 +176,21 @@ function buildFrame(state, cols, rows) {
       }
       const s = filtered[idx];
       const age = visibleSlice(relativeAge(s.updatedMs), ageW);
+      const date = visibleSlice(shortDate(s.updatedMs), dateW);
       const loc = visibleSlice(locationLabel(s), locW);
       const sum = visibleSlice(s.summary || "(no summary)", sumW);
-      const raw = ` ${age} ${loc} ${sum}`;
       if (idx === selected) {
+        const raw = `▶ ${age} ${date} ${loc} ${sum}`;
         lines.push(`${ansi.inverse}${raw}${ansi.reset}`);
       } else {
         lines.push(
-          ` ${ansi.gray}${age}${ansi.reset} ${ansi.green}${loc}${ansi.reset} ${sum}`
+          `  ${ansi.gray}${age}${ansi.reset} ${ansi.dim}${date}${ansi.reset} ${ansi.green}${loc}${ansi.reset} ${sum}`
         );
       }
     }
   }
 
-  const help = `${ansi.dim}↑/↓ move · Enter resume · Tab launcher · Esc quit${ansi.reset}`;
+  const help = `${ansi.dim} ↑/↓ PgUp/PgDn Home/End move · type to fuzzy-find · Enter resume · Tab launcher · Esc quit${ansi.reset}`;
   lines.push(help);
   return lines.join("\r\n");
 }
@@ -170,10 +200,11 @@ function buildFrame(state, cols, rows) {
 function runPreview(args) {
   const rows = args._[0] ? parseInt(args._[0], 10) : 12;
   const cols = args._[1] ? parseInt(args._[1], 10) : 100;
-  const all = loadSessions({ search: args.search, limit: args.limit || 0 });
+  const all = loadSessions({});
+  const filtered = filterSessions(all, args.search || "");
   const state = {
     all,
-    filtered: all,
+    filtered,
     selected: 0,
     scroll: 0,
     search: args.search || "",
@@ -200,20 +231,18 @@ function runTui() {
   let scroll = 0;
 
   function applyFilter() {
-    const q = search.toLowerCase();
-    filtered = q
-      ? all.filter((s) =>
-          [s.summary, s.cwd, s.repository, s.branch, s.id]
-            .join(" \u0001 ")
-            .toLowerCase()
-            .includes(q)
-        )
-      : all;
-    if (selected >= filtered.length) selected = Math.max(0, filtered.length - 1);
+    filtered = filterSessions(all, search);
+    // Keep selection in range; jump to top when actively filtering.
+    if (search) {
+      selected = 0;
+      scroll = 0;
+    } else if (selected >= filtered.length) {
+      selected = Math.max(0, filtered.length - 1);
+    }
   }
 
   function rowsAvailable() {
-    return Math.max(3, (stdout.rows || 24) - 4); // header(2) + footer(2)
+    return Math.max(3, (stdout.rows || 24) - 3); // header(2) + footer(1)
   }
 
   function ensureVisible() {
