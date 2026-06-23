@@ -69,12 +69,22 @@ function runList(args) {
     process.stdout.write("No sessions found.\n");
     return;
   }
-  for (const s of sessions) {
+  const launcher = args.copilot ? "copilot" : "agency";
+  const dim = process.stdout.isTTY ? "\x1b[2m" : "";
+  const reset = process.stdout.isTTY ? "\x1b[0m" : "";
+  sessions.forEach((s, i) => {
+    const n = String(i + 1).padStart(2);
     const age = relativeAge(s.updatedMs).padStart(4);
     const loc = locationLabel(s);
-    const sum = s.summary || "(no summary)";
-    process.stdout.write(`${age}  ${s.id.slice(0, 8)}  ${loc}  —  ${sum}\n`);
-  }
+    let sum = s.summary || "(no summary)";
+    if (sum.length > 100) sum = sum.slice(0, 99) + "\u2026";
+    const { display } = resumeCommand(s.id, launcher);
+    process.stdout.write(`${n}. ${age}  ${loc}  \u2014  ${sum}\n`);
+    process.stdout.write(`    ${dim}${display}${reset}\n`);
+  });
+  process.stdout.write(
+    `\n${dim}Copy a resume command above and run it to resume that session.${reset}\n`
+  );
 }
 
 function runResumeCmd(args) {
