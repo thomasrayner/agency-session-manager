@@ -148,6 +148,18 @@ assert.ok(
 );
 ok("parseQuery operators + dates");
 
+// --- query language: partial / mid-typing input must never throw
+for (const partial of ["after", "before:", "after ", "before june", "after:", "excl", "excl:", "incl:"]) {
+  assert.doesNotThrow(() => parseQuery(partial, NOW), `parseQuery(${JSON.stringify(partial)}) throws`);
+}
+// incl:/excl: aliases resolve to includes/excludes (matches the footer hint)
+assert.deepEqual(parseQuery("incl:csat", NOW).includes, ["csat"], "incl: alias");
+assert.deepEqual(parseQuery("excl:automated", NOW).negatives, ["automated"], "excl: alias");
+// a lone "excl:" must NOT become a fuzzy term that filters everything out
+const lone = parseQuery("excl:", NOW);
+assert.equal(lone.positives.length, 0, "lone excl: is not a positive term");
+ok("parser tolerates partial input + incl/excl aliases");
+
 // --- query language: filtering against sample sessions
 const qSample = [
   { summary: "csat survey results", cwd: "", repository: "metrics", branch: "main", id: "x", updatedMs: NOW - 1000 },
