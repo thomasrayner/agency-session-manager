@@ -179,6 +179,13 @@ assert.deepEqual(expandValueList('"You are","Clawpilot"'), ["You are", "Clawpilo
 assert.deepEqual(expandValueList('"a,b","c"'), ["a,b", "c"], "comma inside quotes is literal");
 assert.deepEqual(expandValueList('a{1,2}-x,b'), ["a1-x", "a2-x", "b"], "brace + suffix + top-level comma");
 assert.deepEqual(expandValueList('pre{a,{b,c}}'), ["prea", "preb", "prec"], "nested brace expansion");
+// brace expansion applies inside quotes too (quoted only to keep the space)
+assert.deepEqual(expandValueList('"Analyze {the,all}"'), ["Analyze the", "Analyze all"], "brace expands inside quotes");
+assert.deepEqual(
+  expandValueList('clawpilot,"You are a","Reply with","Analyze {the,all}"'),
+  ["clawpilot", "You are a", "Reply with", "Analyze the", "Analyze all"],
+  "mixed comma list + quoted phrases + quoted brace expansion"
+);
 // excludes with a comma list drops a session matching ANY value
 assert.deepEqual(parseQuery('excl:"You are","Clawpilot"', NOW).negatives, ["you are", "clawpilot"], "excl comma list -> flat negatives");
 assert.deepEqual(parseQuery('excl:Test{1,2,3}', NOW).negatives, ["test1", "test2", "test3"], "excl brace expansion");
