@@ -12,6 +12,7 @@ import {
   fuzzyScore,
   filterSessions,
 } from "../lib/sessions.mjs";
+import { parseQuery } from "../lib/query.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const bin = path.join(here, "..", "bin", "session-manager.mjs");
@@ -120,5 +121,46 @@ assert.ok(
 const swarmHits = filterSessions(sample, "swrm");
 assert.equal(swarmHits[0].id, "b", "fuzzy term matches across fields");
 ok("filterSessions multi-term AND + ranking");
+
+// --- query language: parsing
+const NOW = Date.parse("2026-06-23T12:00:00-07:00");
+const pq = parseQuery(
+  "includes:csat excludes:automated before:today-3 after june 22 15:00",
+  NOW
+);
+assert.deepEqual(pq.includes, ["csat"], "includes: parsed");
+assert.deepEqual(pq.negatives, ["automated"], "excludes: parsed");
+assert.equal(
+  new Date(pq.before).getDate(),
+  20,
+  "before:today-3 → 3 days before the 23rd"
+);
+assert.equal(new Date(pq.after).getHours(), 15, "after june 22 15:00 → 15:00");
+assert.equal(new Date(pq.after).getMonth(), 5, "month june → 5");
+const pq2 = parseQuery("repo:swarm -automated +csat \"exact phrase\" review", NOW);
+assert.deepEqual(pq2.fields.repo, ["swarm"], "repo: field filter");
+assert.deepEqual(pq2.negatives, ["automated"], "-term shorthand");
+assert.deepEqual(pq2.includes, ["csat"], "+term shorthand");
+assert.ok(
+  pq2.positives.some((p) => p.term === "exact phrase" && p.substr),
+  "quoted phrase is a substring positive"
+);
+ok("parseQuery operators + dates");
+
+// --- query language: filtering against sample sessions
+const qSample = [
+  { summary: "csat survey results", cwd: "", repository: "metrics", branch: "main", id: "x", updatedMs: NOW - 1000 },
+  { summary: "csat automated export", cwd: "", repository: "metrics", branch: "main", id: "y", updatedMs: NOW - 2000 },
+  { summary: "unrelated", cwd: "", repository: "other", branch: "dev", id: "z", updatedMs: NOW - 3000 },
+];
+const inc = filterSessions(qSample, "includes:csat");
+assert.equal(inc.length, 2, "includes:csat keeps only csat sessions");
+const exc = filterSessions(qSample, "includes:csat excludes:automated");
+assert.deepEqual(exc.map((s) => s.id), ["x"], "excludes:automated drops the automated one");
+const fld = filterSessions(qSample, "repo:metrics branch:dev");
+assert.equal(fld.length, 0, "field filters AND together");
+const dated = filterSessions(qSample, "after:2026-06-23T11:00:00");
+assert.ok(dated.length >= 1 && dated.every((s) => s.updatedMs >= Date.parse("2026-06-23T11:00:00")), "after: date bound");
+ok("filterSessions honors query operators");
 
 console.log(`\nAll ${passed} smoke checks passed.`);

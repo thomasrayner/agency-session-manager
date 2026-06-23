@@ -59,11 +59,22 @@ List recent sessions (most recent first):
 node "<plugin-root>/bin/session-manager.mjs" --list --limit 20
 ```
 
-Search by summary / cwd / repo / branch / id:
+Search by summary / cwd / repo / branch / id (query language: fuzzy + operators):
 
 ```bash
 node "<plugin-root>/bin/session-manager.mjs" --list --search "design review" --limit 20
 ```
+
+The `--search` value supports a query language (same in the TUI):
+
+- bare words → fuzzy match (AND, ranked); `"quoted"` → substring match
+- `includes:foo` / `+foo` → must contain; `excludes:foo` / `-foo` / `!foo` → must not
+- `repo:`, `branch:`, `cwd:`, `id:` → field-scoped substring filters
+- `before:<date>` / `after:<date>` (aliases `until:` / `since:`) with dates like
+  `today-3`, `now-2h`, `2026-06-22T15:00`, `15:00`, or `june 22 15:00`
+  (quote spaced dates in the `key:value` form: `before:"june 22 15:00"`)
+
+Example: `--search 'repo:swarm excludes:automated after:today-7'`
 
 Get structured data to reason over:
 

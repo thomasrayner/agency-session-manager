@@ -200,7 +200,7 @@ function buildFrame(state, cols, rows) {
     }
   }
 
-  const help = `${ansi.dim} ↑/↓ PgUp/PgDn Home/End move · type to fuzzy-find · Enter resume · Tab launcher · Esc quit${ansi.reset}`;
+  const help = `${ansi.dim} ↑/↓ PgUp/PgDn Home/End · type to search · incl:/excl:/repo:/before:/after: · Enter resume · Tab launcher · Esc quit${ansi.reset}`;
   lines.push(help);
   return lines.join("\r\n");
 }
