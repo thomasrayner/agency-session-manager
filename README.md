@@ -82,6 +82,20 @@ space-separated; wrap a multi-word value in `"double quotes"`.
 | `before:<date>` / `until:<date>` | only sessions updated at/before the date |
 | `after:<date>` / `since:<date>` | only sessions updated at/after the date |
 
+**Multiple values per keyword.** Any `includes:`/`excludes:` value (and the
+`+`/`-`/`!` shorthands) accepts a comma-separated list and bash-style brace
+expansion:
+
+| Query | Meaning |
+| --- | --- |
+| `excludes:"You are","Clawpilot"` | exclude sessions matching **any** listed value |
+| `excludes:Test{1,2,3}` | expands to `Test1`, `Test2`, `Test3` (exclude any) |
+| `includes:csat,survey` | keep sessions containing **csat OR survey** (one OR-group) |
+| `includes:foo includes:bar` | two groups — must contain `foo` **AND** `bar` |
+
+Commas inside quotes (`excl:"a,b"`) and inside braces (`{1,2}`) are treated
+literally / as brace alternatives, not as value separators.
+
 **Dates** (case-insensitive) accept: `now`, `now-2h`, `now+30m` (units `s m h d w`);
 `today`, `today-3`, `today+1`, `yesterday`, `tomorrow`; ISO `2026-06-22` /
 `2026-06-22T15:00`; a bare time `15:00` (today); or a month phrase `june 22`,

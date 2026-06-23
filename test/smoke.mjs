@@ -129,7 +129,7 @@ const pq = parseQuery(
   "includes:csat excludes:automated before:today-3 after june 22 15:00",
   NOW
 );
-assert.deepEqual(pq.includes, ["csat"], "includes: parsed");
+assert.deepEqual(pq.includes, [["csat"]], "includes: parsed");
 assert.deepEqual(pq.negatives, ["automated"], "excludes: parsed");
 assert.equal(
   new Date(pq.before).getDate(),
@@ -141,7 +141,7 @@ assert.equal(new Date(pq.after).getMonth(), 5, "month june → 5");
 const pq2 = parseQuery("repo:swarm -automated +csat \"exact phrase\" review", NOW);
 assert.deepEqual(pq2.fields.repo, ["swarm"], "repo: field filter");
 assert.deepEqual(pq2.negatives, ["automated"], "-term shorthand");
-assert.deepEqual(pq2.includes, ["csat"], "+term shorthand");
+assert.deepEqual(pq2.includes, [["csat"]], "+term shorthand");
 assert.ok(
   pq2.positives.some((p) => p.term === "exact phrase" && p.substr),
   "quoted phrase is a substring positive"
@@ -153,7 +153,7 @@ for (const partial of ["after", "before:", "after ", "before june", "after:", "e
   assert.doesNotThrow(() => parseQuery(partial, NOW), `parseQuery(${JSON.stringify(partial)}) throws`);
 }
 // incl:/excl: aliases resolve to includes/excludes (matches the footer hint)
-assert.deepEqual(parseQuery("incl:csat", NOW).includes, ["csat"], "incl: alias");
+assert.deepEqual(parseQuery("incl:csat", NOW).includes, [["csat"]], "incl: alias");
 assert.deepEqual(parseQuery("excl:automated", NOW).negatives, ["automated"], "excl: alias");
 // a lone "excl:" must NOT become a fuzzy term that filters everything out
 const lone = parseQuery("excl:", NOW);
@@ -161,7 +161,7 @@ assert.equal(lone.positives.length, 0, "lone excl: is not a positive term");
 ok("parser tolerates partial input + incl/excl aliases");
 
 // --- quoted phrase values for include/exclude (and field) filters
-assert.deepEqual(parseQuery('incl:"two words"', NOW).includes, ["two words"], "quoted include phrase");
+assert.deepEqual(parseQuery('incl:"two words"', NOW).includes, [["two words"]], "quoted include phrase");
 assert.deepEqual(parseQuery('excl:"foo bar"', NOW).negatives, ["foo bar"], "quoted exclude phrase");
 assert.deepEqual(parseQuery('repo:"my repo"', NOW).fields.repo, ["my repo"], "quoted field value");
 assert.deepEqual(parseQuery('-"foo bar"', NOW).negatives, ["foo bar"], "quoted minus shorthand");
@@ -169,8 +169,22 @@ assert.deepEqual(parseQuery('-"foo bar"', NOW).negatives, ["foo bar"], "quoted m
 const qp = parseQuery('"design review"', NOW);
 assert.deepEqual(qp.positives, [{ term: "design review", substr: true }], "bare quoted phrase is substring positive");
 // includes:"a b" keyword + bare keyword form both work
-assert.deepEqual(parseQuery('incl "a b"', NOW).includes, ["a b"], "bare incl keyword + quoted value");
+assert.deepEqual(parseQuery('incl "a b"', NOW).includes, [["a b"]], "bare incl keyword + quoted value");
 ok("quoted phrase values in incl/excl/field filters");
+
+// --- multi-value keywords: comma lists + brace expansion
+import { expandValueList } from "../lib/query.mjs";
+assert.deepEqual(expandValueList('Test{1,2,3}'), ["Test1", "Test2", "Test3"], "brace expansion");
+assert.deepEqual(expandValueList('"You are","Clawpilot"'), ["You are", "Clawpilot"], "quoted comma list");
+assert.deepEqual(expandValueList('"a,b","c"'), ["a,b", "c"], "comma inside quotes is literal");
+assert.deepEqual(expandValueList('a{1,2}-x,b'), ["a1-x", "a2-x", "b"], "brace + suffix + top-level comma");
+assert.deepEqual(expandValueList('pre{a,{b,c}}'), ["prea", "preb", "prec"], "nested brace expansion");
+// excludes with a comma list drops a session matching ANY value
+assert.deepEqual(parseQuery('excl:"You are","Clawpilot"', NOW).negatives, ["you are", "clawpilot"], "excl comma list -> flat negatives");
+assert.deepEqual(parseQuery('excl:Test{1,2,3}', NOW).negatives, ["test1", "test2", "test3"], "excl brace expansion");
+// includes with a comma list is a single OR-group
+assert.deepEqual(parseQuery('incl:"foo","bar"', NOW).includes, [["foo", "bar"]], "incl comma list -> OR-group");
+ok("comma lists + brace expansion for incl/excl");
 
 // --- query language: filtering against sample sessions
 const qSample = [
@@ -186,6 +200,12 @@ const excPhrase = filterSessions(qSample, 'excludes:"automated export"');
 assert.ok(!excPhrase.some((s) => s.id === "y"), "quoted exclude phrase drops the matching session");
 const incPhrase = filterSessions(qSample, 'includes:"csat automated"');
 assert.deepEqual(incPhrase.map((s) => s.id), ["y"], "quoted include phrase keeps only the phrase match");
+// include OR-group: keep sessions containing survey OR export (both csat rows)
+const incOr = filterSessions(qSample, 'incl:survey,export');
+assert.deepEqual(incOr.map((s) => s.id).sort(), ["x", "y"], "include comma list is OR");
+// exclude comma list drops a session matching ANY listed value
+const excList = filterSessions(qSample, 'excl:survey,unrelated');
+assert.deepEqual(excList.map((s) => s.id), ["y"], "exclude comma list drops any match");
 const fld = filterSessions(qSample, "repo:metrics branch:dev");
 assert.equal(fld.length, 0, "field filters AND together");
 const dated = filterSessions(qSample, "after:2026-06-23T11:00:00");
