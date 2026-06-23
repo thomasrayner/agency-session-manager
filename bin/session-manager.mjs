@@ -14,6 +14,7 @@
 
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { pathToFileURL } from "node:url";
 import {
   loadSessions,
   filterSessions,
@@ -145,10 +146,26 @@ function shortDate(ms) {
   return `${d.getFullYear()} ${mon} ${day}`;
 }
 
+// Word-boundary cursor movement helpers for the search box. A "word" is a run
+// of non-space characters; movement skips intervening whitespace. Pure + tested.
+export function wordLeft(str, cur) {
+  let i = Math.max(0, Math.min(cur, str.length));
+  while (i > 0 && str[i - 1] === " ") i--;
+  while (i > 0 && str[i - 1] !== " ") i--;
+  return i;
+}
+export function wordRight(str, cur) {
+  let i = Math.max(0, Math.min(cur, str.length));
+  while (i < str.length && str[i] === " ") i++;
+  while (i < str.length && str[i] !== " ") i++;
+  return i;
+}
+
 // Pure frame builder — assembles the screen as a string. No IO, so it is
 // directly testable and reused by both the live TUI and `--preview`.
 function buildFrame(state, cols, rows) {
   const { all, filtered, selected, scroll, search, launcher } = state;
+  const cursor = Math.max(0, Math.min(state.cursor ?? search.length, search.length));
   const win = Math.max(3, rows - 3); // header(2) + footer(1)
   const lines = [];
 
@@ -163,7 +180,11 @@ function buildFrame(state, cols, rows) {
     search && filtered.length !== all.length
       ? `${filtered.length} of ${all.length}`
       : `${all.length}`;
-  const prompt = `${ansi.yellow}🔍 ${search}${ansi.reset}${ansi.dim}▏${ansi.reset}`;
+  // Render a visible block cursor at the insertion point (terminal cursor is hidden).
+  const before = search.slice(0, cursor);
+  const at = cursor < search.length ? search[cursor] : " ";
+  const after = cursor < search.length ? search.slice(cursor + 1) : "";
+  const prompt = `${ansi.yellow}🔍 ${before}${ansi.reset}${ansi.inverse}${at}${ansi.reset}${ansi.yellow}${after}${ansi.reset}`;
   const status = `${ansi.dim}${pos} · ${matchInfo} sessions${ansi.reset}`;
   const padN = Math.max(1, cols - stripLen(prompt) - stripLen(status) - 2);
   lines.push(` ${prompt}${" ".repeat(padN)}${status}`);
@@ -201,7 +222,7 @@ function buildFrame(state, cols, rows) {
     }
   }
 
-  const help = `${ansi.dim} ↑/↓ PgUp/PgDn Home/End · type to search · incl:/excl:/repo:/before:/after: · Enter resume · Tab launcher · Esc quit${ansi.reset}`;
+  const help = `${ansi.dim} ↑/↓ select · ←/→ edit (Ctrl+←/→ word) · type to search · incl:/excl:/repo:/before:/after: · Enter resume · Tab launcher · Esc quit${ansi.reset}`;
   lines.push(help);
   return lines.join("\r\n");
 }
@@ -237,6 +258,7 @@ function runTui() {
   let all = loadSessions({});
   let launcher = "agency"; // default per design
   let search = "";
+  let cursor = 0; // insertion point within `search`
   let filtered = all;
   let selected = 0;
   let scroll = 0;
@@ -268,7 +290,7 @@ function runTui() {
     const rows = stdout.rows || 24;
     ensureVisible();
     const frame = buildFrame(
-      { all, filtered, selected, scroll, search, launcher },
+      { all, filtered, selected, scroll, search, cursor, launcher },
       cols,
       rows
     );
@@ -322,11 +344,31 @@ function runTui() {
       const code = key.slice(2);
       const win = rowsAvailable();
       switch (code) {
-        case "A": // up
+        case "A": // up — move selection
           selected = Math.max(0, selected - 1);
           break;
-        case "B": // down
+        case "B": // down — move selection
           selected = Math.min(filtered.length - 1, selected + 1);
+          break;
+        case "D": // left — move text cursor
+          cursor = Math.max(0, cursor - 1);
+          break;
+        case "C": // right — move text cursor
+          cursor = Math.min(search.length, cursor + 1);
+          break;
+        case "1;5D": // Ctrl-Left — word left
+        case "1;3D": // Alt-Left
+          cursor = wordLeft(search, cursor);
+          break;
+        case "1;5C": // Ctrl-Right — word right
+        case "1;3C": // Alt-Right
+          cursor = wordRight(search, cursor);
+          break;
+        case "3~": // Delete — forward-delete char at cursor
+          if (cursor < search.length) {
+            search = search.slice(0, cursor) + search.slice(cursor + 1);
+            applyFilter();
+          }
           break;
         case "5~": // PgUp
           selected = Math.max(0, selected - win);
@@ -334,11 +376,11 @@ function runTui() {
         case "6~": // PgDn
           selected = Math.min(filtered.length - 1, selected + win);
           break;
-        case "H": // Home
+        case "H": // Home — jump to newest session
         case "1~":
           selected = 0;
           break;
-        case "F": // End
+        case "F": // End — jump to oldest session
         case "4~":
           selected = Math.max(0, filtered.length - 1);
           break;
@@ -357,10 +399,21 @@ function runTui() {
       return render();
     }
 
-    // Backspace / Delete
+    // Ctrl-A / Ctrl-E — jump text cursor to start / end of the search box
+    if (key === "\x01") {
+      cursor = 0;
+      return render();
+    }
+    if (key === "\x05") {
+      cursor = search.length;
+      return render();
+    }
+
+    // Backspace / Delete — remove the char before the cursor
     if (key === "\x7f" || key === "\b") {
-      if (search.length) {
-        search = search.slice(0, -1);
+      if (cursor > 0) {
+        search = search.slice(0, cursor - 1) + search.slice(cursor);
+        cursor -= 1;
         applyFilter();
         render();
       }
@@ -371,12 +424,13 @@ function runTui() {
     // filter instead, which is the primary navigation aid.
     if (key === "\x0b") return; // ignore Ctrl-K
 
-    // Printable text -> append to the search filter. A single `data` event can
-    // carry MANY characters (fast typing, paste, or buffered input), so process
-    // the whole chunk rather than only single keystrokes.
-    const res = appendKeyChunk(search, key);
+    // Printable text -> insert at the cursor. A single `data` event can carry
+    // MANY characters (fast typing, paste, or buffered input), so process the
+    // whole chunk rather than only single keystrokes.
+    const res = appendKeyChunk(search, key, cursor);
     if (res.changed) {
       search = res.search;
+      cursor = res.cursor;
       applyFilter();
       render();
     }
@@ -385,15 +439,22 @@ function runTui() {
 }
 
 // --------------------------------------------------------------------- main
-const args = parseArgs(process.argv.slice(2));
-if (args.help) {
-  process.stdout.write(HELP);
-} else if (args.list) {
-  runList(args);
-} else if (args.preview) {
-  runPreview(args);
-} else if (args.resumeCmd) {
-  runResumeCmd(args);
-} else {
-  runTui();
+// Only run the CLI when executed directly — importing this module (e.g. from
+// tests to reuse pure helpers like wordLeft/wordRight) must have no side effects.
+const isMain =
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stdout.write(HELP);
+  } else if (args.list) {
+    runList(args);
+  } else if (args.preview) {
+    runPreview(args);
+  } else if (args.resumeCmd) {
+    runResumeCmd(args);
+  } else {
+    runTui();
+  }
 }

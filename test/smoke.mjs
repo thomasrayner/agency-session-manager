@@ -194,4 +194,24 @@ assert.equal(escRes.changed, false, "escape sequence makes no change");
 assert.equal(escRes.search, beforeEsc, "escape sequence leaves search intact");
 ok("appendKeyChunk handles bursts, backspace, escapes");
 
+// --- cursor-aware editing
+import { wordLeft, wordRight } from "../bin/session-manager.mjs";
+// insert at an interior cursor position
+let cur = appendKeyChunk("rapo", "e", 1); // insert 'e' after 'r' -> "reapo"
+assert.equal(cur.search, "reapo", "insert at cursor");
+assert.equal(cur.cursor, 2, "cursor advances past insert");
+// backspace at an interior cursor deletes the char before it
+let bs = appendKeyChunk("repoo", "\x7f", 5);
+assert.equal(bs.search, "repo", "backspace before cursor");
+assert.equal(bs.cursor, 4, "cursor moves back after backspace");
+// word movement
+assert.equal(wordLeft("repo:swarm review", 17), 11, "wordLeft to start of last word");
+assert.equal(wordLeft("repo:swarm review", 11), 0, "wordLeft to start of first word");
+assert.equal(wordRight("repo:swarm review", 0), 10, "wordRight to end of first word");
+assert.equal(wordRight("repo:swarm review", 10), 17, "wordRight to end of last word");
+// clamping
+assert.equal(wordLeft("abc", 99), 0, "wordLeft clamps overshoot");
+assert.equal(wordRight("abc", -5), 3, "wordRight clamps undershoot");
+ok("cursor-aware insert/delete + word movement");
+
 console.log(`\nAll ${passed} smoke checks passed.`);
