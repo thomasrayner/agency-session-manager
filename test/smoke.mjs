@@ -160,6 +160,18 @@ const lone = parseQuery("excl:", NOW);
 assert.equal(lone.positives.length, 0, "lone excl: is not a positive term");
 ok("parser tolerates partial input + incl/excl aliases");
 
+// --- quoted phrase values for include/exclude (and field) filters
+assert.deepEqual(parseQuery('incl:"two words"', NOW).includes, ["two words"], "quoted include phrase");
+assert.deepEqual(parseQuery('excl:"foo bar"', NOW).negatives, ["foo bar"], "quoted exclude phrase");
+assert.deepEqual(parseQuery('repo:"my repo"', NOW).fields.repo, ["my repo"], "quoted field value");
+assert.deepEqual(parseQuery('-"foo bar"', NOW).negatives, ["foo bar"], "quoted minus shorthand");
+// a bare "exact phrase" stays a substring positive (not a key/value)
+const qp = parseQuery('"design review"', NOW);
+assert.deepEqual(qp.positives, [{ term: "design review", substr: true }], "bare quoted phrase is substring positive");
+// includes:"a b" keyword + bare keyword form both work
+assert.deepEqual(parseQuery('incl "a b"', NOW).includes, ["a b"], "bare incl keyword + quoted value");
+ok("quoted phrase values in incl/excl/field filters");
+
 // --- query language: filtering against sample sessions
 const qSample = [
   { summary: "csat survey results", cwd: "", repository: "metrics", branch: "main", id: "x", updatedMs: NOW - 1000 },
@@ -170,6 +182,10 @@ const inc = filterSessions(qSample, "includes:csat");
 assert.equal(inc.length, 2, "includes:csat keeps only csat sessions");
 const exc = filterSessions(qSample, "includes:csat excludes:automated");
 assert.deepEqual(exc.map((s) => s.id), ["x"], "excludes:automated drops the automated one");
+const excPhrase = filterSessions(qSample, 'excludes:"automated export"');
+assert.ok(!excPhrase.some((s) => s.id === "y"), "quoted exclude phrase drops the matching session");
+const incPhrase = filterSessions(qSample, 'includes:"csat automated"');
+assert.deepEqual(incPhrase.map((s) => s.id), ["y"], "quoted include phrase keeps only the phrase match");
 const fld = filterSessions(qSample, "repo:metrics branch:dev");
 assert.equal(fld.length, 0, "field filters AND together");
 const dated = filterSessions(qSample, "after:2026-06-23T11:00:00");

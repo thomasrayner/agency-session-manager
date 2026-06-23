@@ -69,6 +69,7 @@ The `--search` value supports a query language (same in the TUI):
 
 - bare words → fuzzy match (AND, ranked); `"quoted"` → substring match
 - `includes:foo` / `+foo` → must contain; `excludes:foo` / `-foo` / `!foo` → must not
+  (quote the value for a phrase with spaces: `includes:"two words"`, `excludes:"foo bar"`)
 - `repo:`, `branch:`, `cwd:`, `id:` → field-scoped substring filters
 - `before:<date>` / `after:<date>` (aliases `until:` / `since:`) with dates like
   `today-3`, `now-2h`, `2026-06-22T15:00`, `15:00`, or `june 22 15:00`

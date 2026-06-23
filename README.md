@@ -72,7 +72,9 @@ space-separated; wrap a multi-word value in `"double quotes"`.
 | `design review` | bare words **fuzzy-match** and rank by relevance (AND) |
 | `"exact phrase"` | quoted = **substring** match (must contain) |
 | `includes:csat` / `+csat` | substring filter — text **must contain** `csat` |
+| `includes:"two words"` / `+"two words"` | quote the value to match a **phrase with spaces** |
 | `excludes:automated` / `-automated` / `!automated` | substring filter — must **not** contain |
+| `excludes:"two words"` / `-"two words"` | quote to exclude a **phrase with spaces** |
 | `repo:swarm` | field filter on repo/location |
 | `branch:main` | field filter on branch |
 | `cwd:proj` | field filter on the working directory path |
