@@ -1,0 +1,9 @@
+{
+  "name": "agency-session-manager",
+  "description": "TUI session manager for Copilot CLI. Browse, filter, and resume any agency copilot / copilot CLI session from one interactive terminal picker.",
+  "version": "0.1.0",
+  "author": {
+    "name": "thrayner"
+  },
+  "keywords": ["sessions", "tui", "resume", "session-manager", "copilot", "agency"]
+}

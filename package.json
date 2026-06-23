@@ -1,0 +1,19 @@
+{
+  "name": "agency-session-manager",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TUI session manager for Copilot CLI / agency copilot sessions.",
+  "type": "module",
+  "bin": {
+    "agency-session-manager": "bin/session-manager.mjs"
+  },
+  "scripts": {
+    "start": "node bin/session-manager.mjs",
+    "list": "node bin/session-manager.mjs --list",
+    "test": "node test/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "license": "MIT"
+}
